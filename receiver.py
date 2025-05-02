@@ -74,6 +74,9 @@ async def receive_video(sender_id, offer, websocket):
 async def websocket_handler():
     """Get streaming information from WebRTC, connect to first Sender."""
     session = aiohttp.ClientSession()
+    # TODO: We need some UI to select any one of the
+    # server that provide RTC streams, so we can send request_offer
+    # then the sender should create an offer that we can answer to
     async with session.ws_connect('ws://localhost:8080/receiver') as ws:
         async for message in ws:
             data = json.loads(message.data)

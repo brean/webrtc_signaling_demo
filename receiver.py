@@ -18,7 +18,7 @@ class VideoTrack(VideoStreamTrack):
         return frame
 
 
-async def handle_track(track, sender_id):
+async def handle_track(track, receiver_id):
     frame_count = 0
     while True:
         try:
@@ -35,7 +35,7 @@ async def handle_track(track, sender_id):
                 print(
                     f"Unexpected frame type: {type(frame)}")
                 continue
-            cv2.imwrite(f"{sender_id}_{frame_count}.png", frame)
+            cv2.imwrite(f"{receiver_id}_{frame_count}.png", frame)
         except asyncio.TimeoutError:
             print("Timeout waiting for frame, continuing...")
         except Exception as e:
@@ -52,7 +52,7 @@ async def receive_video(sender_id, receiver_id, offer, websocket):
     def on_track(track):
         if isinstance(track, MediaStreamTrack):
             print(f"Receiving {track.kind} track")
-            asyncio.ensure_future(handle_track(track, sender_id))
+            asyncio.ensure_future(handle_track(track, receiver_id))
 
     @pc.on("datachannel")
     def on_datachannel(channel):

@@ -25,9 +25,10 @@ class VideoTrack(VideoStreamTrack):
         return video_frame
 
 
-async def send_offer(ws, offer):
+async def send_offer(ws, offer, receiver_id):
     offer_msg = {
         "type": "offer",
+        "receiver_id": receiver_id,
         "offer": {
             "sdp": offer.sdp,
             "type": offer.type
@@ -40,6 +41,7 @@ async def websocket_handler(url: str):
     # create websocket session
     video_track = VideoTrack()
     session = aiohttp.ClientSession()
+    pcs = {}
     try:
         async with session.ws_connect(f'{url}sender') as ws:
             async for message in ws:
@@ -47,23 +49,35 @@ async def websocket_handler(url: str):
                 data_type = data.get('type')
                 if data_type == 'registered':
                     sender_id = data['sender_id']
-                    print(f'new sender registered {sender_id}')
+                    print(f'registered sender as {sender_id}')
                 elif data_type == 'request_offer':
                     if not sender_id:
-                        return
+                        print('ERROR: no sender')
+                        continue
+                    receiver_id = data.get('receiver_id')
+                    if not receiver_id:
+                        print('ERROR: no receiver_id')
+                        continue
                     pc = RTCPeerConnection()
                     pc.addTrack(video_track)
+                    pcs[receiver_id] = pc
                     # create WebRTC-offer
                     # TODO save pc-connction somewhere to control it.
                     offer = await pc.createOffer()
                     await pc.setLocalDescription(offer)
-                    print(f'send offer {offer}')
-                    await send_offer(ws, pc.localDescription)
+                    print(f'send offer to {receiver_id}')
+                    await send_offer(ws, pc.localDescription, receiver_id)
                 elif data_type == 'answer':
+                    receiver_id = data.get('receiver_id')
+                    if not receiver_id:
+                        print('ERROR: no receiver_id')
+                        continue
+                    answer = data['answer']
                     rsd = RTCSessionDescription(
-                        data.get('sdp'), data.get('type'))
-                    await pc.setRemoteDescription(rsd)
-                    print('answer handled')
+                        answer.get('sdp'), answer.get('type'))
+                    
+                    await pcs[receiver_id].setRemoteDescription(rsd)
+                    print(f'answer handled for {receiver_id}')
                 else:
                     print(f'received unknown data type "{data_type}"')
 

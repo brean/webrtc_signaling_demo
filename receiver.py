@@ -44,7 +44,7 @@ async def handle_track(track, sender_id):
                 break
 
 
-async def receive_video(sender_id, offer, websocket):
+async def receive_video(sender_id, receiver_id, offer, websocket):
     pc = RTCPeerConnection()
     pc.addTrack(VideoTrack())
 
@@ -64,7 +64,10 @@ async def receive_video(sender_id, offer, websocket):
     await websocket.send_json({
         'type': 'answer',
         'sender_id': sender_id,
-        'sdp': answer.sdp
+        'receiver_id': receiver_id,
+        'answer': {
+            'type': answer.type,
+            'sdp': answer.sdp}
     })
 
     while pc.connectionState != "connected":
@@ -74,6 +77,7 @@ async def receive_video(sender_id, offer, websocket):
 async def websocket_handler():
     """Get streaming information from WebRTC, connect to first Sender."""
     session = aiohttp.ClientSession()
+    receiver_id = None
     receiving = False
     # TODO: We need some UI to select any one of the
     # server that provide RTC streams, so we can send request_offer
@@ -82,8 +86,10 @@ async def websocket_handler():
         async for message in ws:
             data = json.loads(message.data)
             data_type = data['type']
-            print(f'received {data}')
-            if data_type == 'sender':
+            if data_type == 'registered':
+                receiver_id = data['receiver_id']
+                print(f'registered receiver as {receiver_id}')
+            elif data_type == 'sender':
                 sender_id = data['sender_id']
                 # TODO: for now we assume there is only ONE sender
                 # however we might want to add some ui to select a
@@ -92,17 +98,25 @@ async def websocket_handler():
                 if receiving:
                     continue
                 print(f'request offer from {sender_id}')
+                receiving = True
                 await ws.send_json({
                     'type': 'request_offer',
+                    'receiver_id': receiver_id,
                     'sender_id': sender_id
                 })
             elif data_type == 'offer':
-                print(data)
+                if not receiver_id:
+                    print('no receiver_id set')
+                    continue
+                if data.get('receiver_id') != receiver_id:
+                    print(
+                        'reciever ids does not match: '
+                        f'{data.get("receiver_id")} - {receiver_id}')
+                    continue
                 rtc_offer = RTCSessionDescription(**data['offer'])
                 print(f'receiving video from {sender_id}')
-                # TODO: create task
-
-                asyncio.create_task(receive_video(sender_id, rtc_offer, ws))
+                asyncio.create_task(receive_video(
+                    sender_id, receiver_id, rtc_offer, ws))
             else:
                 print(f'received unknown data type "{data_type}"')
 

@@ -4,9 +4,9 @@ from aiohttp import web
 import aiohttp
 
 # data for clients
-# active receivers (set of websockets)
-connected_receivers = set()
-# active senders (dict of sender_id: (hash, offer))
+# active receivers (dict of receiver_id: ws)
+receivers = {}
+# active senders (dict of sender_id: ws)
 senders = {}
 
 routes = web.RouteTableDef()
@@ -24,9 +24,9 @@ async def websocket_sender(request):
         'sender_id': sender_id,
     })
     senders[sender_id] = {
-        'ws': ws,
-        'offer': None
+        'ws': ws
     }
+    # TODO: advertise new sender to receivers
 
     try:
         async for msg in ws:
@@ -35,15 +35,17 @@ async def websocket_sender(request):
                 data_type = data.get('type')
                 if data_type == 'offer':
                     offer = data['offer']
-                    senders[sender_id]['offer'] = offer
+                    receiver_id = data['receiver_id']
+                    receiver = receivers[receiver_id]
                     print(
                         f'send offer from {sender_id} '
-                        f'to {len(connected_receivers)} receiver(s)')
-                    for rec_ws in connected_receivers:
-                        await rec_ws.send_json({
-                            "type": "offer",
-                            "offer": offer
-                        })
+                        f'to {receiver_id}')
+                    await receiver['ws'].send_json({
+                        "sender_id": sender_id,
+                        "type": "offer",
+                        "receiver_id": receiver_id,
+                        "offer": offer
+                    })
                 else:
                     print(
                         'received unknown data type from sender'
@@ -55,11 +57,11 @@ async def websocket_sender(request):
     finally:
         # cleanup and inform all clients that the sender disconnected
         del senders[sender_id]
-        for ws in connected_receivers:
-            await ws.send_json({
-                "type": "sender_exit",
-                "id": sender_id
-            })
+        # for ws in connected_receivers:
+        #     await ws.send_json({
+        #         "type": "sender_exit",
+        #         "id": sender_id
+        #     })
 
 
 @routes.get('/receiver')
@@ -68,14 +70,21 @@ async def websocket_receiver(request):
     ws = web.WebSocketResponse()
     await ws.prepare(request)
 
+    receiver_id = str(uuid.uuid4())
+    await ws.send_json({
+        'type': 'registered',
+        'receiver_id': receiver_id,
+    })
+    receivers[receiver_id] = {
+        'ws': ws
+    }
+
     for sender_id, data in senders.items():
-        print(f'send data to receiver for {sender_id}')
+        print(f'send data of sender to receiver for {sender_id}')
         await ws.send_json({
             "type": "sender",
             "sender_id": sender_id
         })
-
-    connected_receivers.add(ws)
 
     try:
         async for msg in ws:
@@ -96,9 +105,8 @@ async def websocket_receiver(request):
                 print(
                     'WS connection closed with exception '
                     f'{ws.exception()}')
-            
     finally:
-        connected_receivers.remove(ws)
+        del receivers[receiver_id]
 
     print('websocket connection closed')
 

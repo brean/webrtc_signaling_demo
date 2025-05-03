@@ -36,12 +36,18 @@ async def websocket_sender(request):
                 if data_type == 'offer':
                     offer = data['offer']
                     senders[sender_id]['offer'] = offer
+                    print(
+                        f'send offer from {sender_id} '
+                        f'to {len(connected_receivers)} receiver(s)')
                     for rec_ws in connected_receivers:
                         await rec_ws.send_json({
-                            "type": "sender",
-                            "sender_id": sender_id,
+                            "type": "offer",
                             "offer": offer
                         })
+                else:
+                    print(
+                        'received unknown data type from sender'
+                        f' "{data_type}"')
             if msg.type == aiohttp.WSMsgType.ERROR:
                 print(
                     'WS connection closed with exception '
@@ -63,13 +69,10 @@ async def websocket_receiver(request):
     await ws.prepare(request)
 
     for sender_id, data in senders.items():
-        if not data.get('offer'):
-            continue
-        offer = data.get('offer')
+        print(f'send data to receiver for {sender_id}')
         await ws.send_json({
             "type": "sender",
-            "sender_id": sender_id,
-            "offer": offer
+            "sender_id": sender_id
         })
 
     connected_receivers.add(ws)
@@ -78,16 +81,22 @@ async def websocket_receiver(request):
         async for msg in ws:
             if msg.type == aiohttp.WSMsgType.TEXT:
                 data = json.loads(msg.data)
-                if data.get('type') == 'answer':
+                data_type = data.get('type')
+                if data_type in ['answer', 'request_offer']:
                     # forward answer to sender
                     sender_id = data.get('sender_id')
                     sender = senders.get(sender_id)
                     sender_ws = sender['ws']
                     await sender_ws.send_json(data)
+                else:
+                    print(
+                        'received unknown data type from receiver'
+                        f' "{data_type}"')
             elif msg.type == aiohttp.WSMsgType.ERROR:
                 print(
                     'WS connection closed with exception '
                     f'{ws.exception()}')
+            
     finally:
         connected_receivers.remove(ws)
 

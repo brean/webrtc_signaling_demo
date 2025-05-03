@@ -2,7 +2,6 @@ import asyncio
 import json
 import cv2
 import aiohttp
-import asyncio
 from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
 from av import VideoFrame
 import fractions
@@ -11,7 +10,7 @@ import fractions
 class VideoTrack(VideoStreamTrack):
     def __init__(self):
         super().__init__()
-        self.cap = cv2.VideoCapture(0)
+        self.cap = cv2.VideoCapture(1)
         self.frame_count = 0
 
     async def recv(self):
@@ -39,6 +38,7 @@ async def send_offer(ws, offer):
 
 async def websocket_handler(url: str):
     # create websocket session
+    video_track = VideoTrack()
     session = aiohttp.ClientSession()
     try:
         async with session.ws_connect(f'{url}sender') as ws:
@@ -52,17 +52,20 @@ async def websocket_handler(url: str):
                     if not sender_id:
                         return
                     pc = RTCPeerConnection()
-                    video_track = VideoTrack()
                     pc.addTrack(video_track)
                     # create WebRTC-offer
+                    # TODO save pc-connction somewhere to control it.
                     offer = await pc.createOffer()
                     await pc.setLocalDescription(offer)
-                    await send_offer(ws, offer)
+                    print(f'send offer {offer}')
+                    await send_offer(ws, pc.localDescription)
                 elif data_type == 'answer':
                     rsd = RTCSessionDescription(
                         data.get('sdp'), data.get('type'))
                     await pc.setRemoteDescription(rsd)
-                    # TODO: loop and send next stream!
+                    print('answer handled')
+                else:
+                    print(f'received unknown data type "{data_type}"')
 
     except KeyboardInterrupt:
         print('Keyboard Interrupt, exiting...')

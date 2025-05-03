@@ -22,7 +22,6 @@ async def handle_track(track, receiver_id):
     frame_count = 0
     while True:
         try:
-            print('wait for track')
             frame = await asyncio.wait_for(track.recv(), timeout=5.0)
             frame_count += 1
             print(f'received frame {frame_count}')

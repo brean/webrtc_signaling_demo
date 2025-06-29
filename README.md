@@ -1,5 +1,7 @@
 # WebRTC Signaling Demo
-Simple WebRTC WebSocket Signaling server with simple server, sender and receiver script
+Simple WebRTC WebSocket Signaling server with simple server, sender and receiver script.
+
+Prototype-implementation for the [webrtc-bridge](https://github.com/brean/webrtc_bridge)
 
 ## Websocket server signaling communication
 ```mermaid
